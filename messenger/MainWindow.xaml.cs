@@ -168,9 +168,6 @@ namespace messenger
             }
 
             //LongPoolMessages();
-
-            // Closing += (s, e) => ViewModelLocator.Cleanup();
-            BitmapImage bitmapSmiley = new BitmapImage(new Uri("smile.gif", UriKind.Relative));
             
         }
 
