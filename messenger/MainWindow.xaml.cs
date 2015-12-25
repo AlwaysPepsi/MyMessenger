@@ -276,6 +276,8 @@ namespace messenger
                 _mappings.Add(@":D", "http://kolobok.us/smiles/standart/grin.gif");
                 _mappings.Add(@":-D", "http://kolobok.us/smiles/standart/grin.gif");
                 _mappings.Add(@"😂", "http://kolobok.us/smiles/standart/grin.gif");
+                _mappings.Add(@"=)", "http://kolobok.us/smiles/standart/smile3.gif");
+                _mappings.Add(@"= )", "http://kolobok.us/smiles/standart/smile3.gif");
 
             }
 
