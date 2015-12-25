@@ -6,10 +6,12 @@ using System.Windows.Media.Imaging;
 using System;
 using System.Windows.Documents;
 using System.Collections.Generic;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 
 namespace messenger
-{
+{   
     public partial class MainWindow : Window
     {
 
@@ -78,21 +80,25 @@ namespace messenger
             public string mode { get; set; }
         }
 
+        public string Api(string reqStr)
+        {   
+            WebClient webClient = new WebClient();
+            webClient.Encoding = System.Text.Encoding.UTF8;
+            return webClient.DownloadString(reqStr);
+        }
+
         public string SendMessage(long userId, string message)
         {
             string reqStrTemplate = "https://api.vkontakte.ru/method/messages.send?user_id={0}&access_token={1}&message={2}";
             string reqStr = string.Format(reqStrTemplate, userId, this.VKToken, message);
-            WebClient webClient = new WebClient();
-            return webClient.DownloadString(reqStr);
+            return Api(reqStr);
         }
 
         public VKFriend[] GetFriends()
         {
             string reqStrTemplate = "https://api.vkontakte.ru/method/friends.get?access_token={0}&order=hints&fields=nickname&count=100";
             string reqStr = string.Format(reqStrTemplate, this.VKToken);
-            WebClient webClient = new WebClient();
-            webClient.Encoding = System.Text.Encoding.UTF8;
-            string response = webClient.DownloadString(reqStr);
+            string response = Api(reqStr);
             VKFriendsResponse jsonResponse = JsonConvert.DeserializeObject<VKFriendsResponse>(response);
             return jsonResponse.response;
         }
@@ -101,9 +107,7 @@ namespace messenger
         {
             string reqStrTemplate = "https://api.vkontakte.ru/method/messages.getHistory?access_token={0}&user_id={1}&v=5.38";
             string reqStr = string.Format(reqStrTemplate, this.VKToken, userId);
-            WebClient webClient = new WebClient();
-            webClient.Encoding = System.Text.Encoding.UTF8;
-            string response = webClient.DownloadString(reqStr);
+            string response = Api(reqStr);
             VKMessagesResponse jsonResponse = JsonConvert.DeserializeObject<VKMessagesResponse>(response);
             return jsonResponse.response.items;
         }
@@ -125,8 +129,20 @@ namespace messenger
 
         private void buttonSendMessagClick(object sender, RoutedEventArgs e)
         {
-            SendMessage(getCurrentUser().user_id, textBoxNewMessage.Text);
-            dialog.addMyMessage(textBoxNewMessage.Text);
+            VKFriend friend = getCurrentUser();
+            string message = textBoxNewMessage.Text;
+            if (friend == null)
+            {
+                MessageBox.Show("Не выбран ни один из друзей", "Ошибка");
+                return;
+            }
+            if (message == null || message == "")
+            {
+                MessageBox.Show("Пустое сообщение", "Ошибка");
+                return;
+            }
+            SendMessage(friend.user_id, message);
+            dialog.addMessage(message, true);
             textBoxNewMessage.Clear();
         }
 
@@ -137,7 +153,8 @@ namespace messenger
             VKToken = loginWin.VKToken;
             VKUserId = loginWin.VKUserId;
             if (VKToken == null)
-                this.Close();
+                Environment.Exit(0);
+
             InitializeComponent();
 
             VKFriend[] friends = GetFriends();
@@ -167,29 +184,119 @@ namespace messenger
             RichTextBox richBox;
             VKFriend friend;
 
+            private Dictionary<string, string> _mappings = new Dictionary<string, string>();
+
+            private string GetEmoticonText(string text)
+            {
+                string match = string.Empty;
+                int lowestPosition = text.Length;
+
+                foreach (KeyValuePair<string, string> pair in _mappings)
+                {
+                    if (text.Contains(pair.Key))
+                    {
+                        int newPosition = text.IndexOf(pair.Key);
+                        if (newPosition < lowestPosition)
+                        {
+                            match = pair.Key;
+                            lowestPosition = newPosition;
+                        }
+                    }
+                }
+
+                return match;
+
+            }
+             
+            private void Emoticons(string msg, Paragraph para)
+            {
+                Run r = new Run(msg);
+
+                para.Inlines.Add(r);
+
+                string emoticonText = GetEmoticonText(r.Text);
+
+                //if paragraph does not contains smile only add plain text to richtextbox rtb2
+                if (string.IsNullOrEmpty(emoticonText))
+                {
+                    richBox.Document.Blocks.Add(para);
+                }
+                else
+                {
+                    while (!string.IsNullOrEmpty(emoticonText))
+                    {
+                        TextPointer tp = r.ContentStart;
+                        // keep moving the cursor until we find the emoticon text
+                        while (!tp.GetTextInRun(LogicalDirection.Forward).StartsWith(emoticonText))
+                            tp = tp.GetNextInsertionPosition(LogicalDirection.Forward);
+                        // select all of the emoticon text
+                        var tr = new TextRange(tp, tp.GetPositionAtOffset(emoticonText.Length)) { Text = string.Empty };
+                        //relative path to image smile file
+                        string path = _mappings[emoticonText];
+                        Image image = new Image
+                        {
+                            Source = new BitmapImage(new System.Uri(path, UriKind.RelativeOrAbsolute)),
+                            Width = 25,
+                            Height = 25,
+                            Stretch = Stretch.None
+                        };
+                        
+
+                        //insert smile
+                        new InlineUIContainer(image, tp);
+
+                        if (para != null)
+                        {
+                            var endRun = para.Inlines.LastInline as Run;
+
+                            if (endRun == null)
+                            {
+                                break;
+                            }
+                            else
+                            {
+                                emoticonText = GetEmoticonText(endRun.Text);
+                            }
+
+                        }
+
+                    }
+                    richBox.Document.Blocks.Add(para);
+
+                }
+            }
+
+
             public Dialog(RichTextBox richBox, VKFriend friend)
             {
                  this.richBox = richBox;
                  this.friend = friend;
+                _mappings.Add(@":)", "http://kolobok.us/smiles/standart/smile3.gif");
+                _mappings.Add(@":-)", "http://kolobok.us/smiles/standart/smile3.gif");
+                _mappings.Add(@"😊", "http://kolobok.us/smiles/standart/smile3.gif");
+                _mappings.Add(@":(", "http://kolobok.us/smiles/standart/sad.gif");
+                _mappings.Add(@":-(", "http://kolobok.us/smiles/standart/sad.gif");
+                _mappings.Add(@":D", "http://kolobok.us/smiles/standart/grin.gif");
+                _mappings.Add(@":-D", "http://kolobok.us/smiles/standart/grin.gif");
+                _mappings.Add(@"😂", "http://kolobok.us/smiles/standart/grin.gif");
+
             }
 
-            public void addMessage(string message, string friend)
+            public void addMessage(string message, bool myMessage = false)
             {
                 var paragraph = new Paragraph();
-                paragraph.Inlines.Add(new Run(string.Format("{0}: {1}", friend, message)));
+               
+
+                if (myMessage)
+                {
+                    paragraph.TextAlignment = System.Windows.TextAlignment.Right;
+                }
+
                 richBox.Document.Blocks.Add(paragraph);
+                Emoticons(message, paragraph);
                 richBox.Focus();
                 richBox.ScrollToEnd();
-            }
-
-            public void addFriendMessage(string message)
-            {
-                addMessage(message, friend.ToString());
-            }
-
-            public void addMyMessage(string message)
-            {
-                addMessage(message, "Я");
+                
             }
 
             public void openDialog(VKMessage[] messages)
@@ -198,14 +305,7 @@ namespace messenger
                 richBox.Document.Blocks.Clear();
                 foreach (VKMessage message in messages)
                 {
-                    if (message.from_id == friend.user_id)
-                    {
-                        addFriendMessage(message.body);
-                    }
-                    else
-                    {
-                        addMyMessage(message.body);
-                    }
+                    addMessage(message.body, message.from_id != friend.user_id);
                 }
             }
         }

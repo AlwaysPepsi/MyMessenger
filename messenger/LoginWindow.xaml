@@ -6,8 +6,8 @@
         xmlns:local="clr-namespace:messenger"
         mc:Ignorable="d"
         Title="Вход"
-        Height="400"
-        Width="700"
+        Height="416"
+        Width="672"
         ResizeMode="NoResize">
     <Grid>
         <Grid.ColumnDefinitions>
